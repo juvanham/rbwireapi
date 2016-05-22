@@ -1,0 +1,35 @@
+
+#
+# this file will make the documentation
+#
+# make -f Makefile.doc 
+#
+
+all: manual.ps manual.pdf view
+
+view: manual.ps
+	gv manual.ps
+
+
+manual.dvi: manual.tex
+			latex manual	
+			latex manual	
+			makeindex manual.idx	
+			latex manual	
+			latex manual	
+
+manual.ps: manual.dvi
+		   dvips -t a4 -o manual.ps manual.dvi
+
+manual.pdf: manual.ps
+		   ps2pdf manual.ps 
+
+aspell: manual.tex
+		aspell -c -t manual.tex
+
+clean:
+	rm -f manual.ps manual.pdf manual.dvi \
+	manual.log manual.aux manual.toc \
+	manual.idx manual.ilg manual.ind
+
+.PHONY: view clean

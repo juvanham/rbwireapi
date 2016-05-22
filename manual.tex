@@ -1,0 +1,1287 @@
+\documentclass[a4paper,twoside]{article}
+
+\usepackage{makeidx} 
+\usepackage{epsfig}
+
+\newcommand{\method}[4]{
+\noindent
+ \index{#1}
+ \begin{tabular}{ll}
+   {\bf {\small Method:}} & {\large {\tt #1}} \\    
+   {\tt {\small Arguments:}} & {\rm #2} \\ 
+   {\tt {\small Result:}}    & {\rm #3}
+ \end{tabular}
+ \\*
+ \begin{tabular}{ll}
+   \hspace{1mm}&
+   \begin{minipage}[l]{0.8\textwidth}
+     {\sl #4} 
+   \end{minipage}
+ \end{tabular}
+\vspace{0.5cm}
+}
+
+\title {WireAPI for Ruby}
+\author {Jurgen Van Ham}
+
+\makeindex
+\begin{document}
+
+\maketitle
+\begin{figure}[htp]
+\centering
+\includegraphics[width=1.5cm,height=1.5cm]{ruby-logo.eps}
+\hspace{1cm}
+\includegraphics[width=3cm,height=1.5cm]{openamq-logo.eps}
+\end{figure}
+
+\tableofcontents
+
+
+
+\section{What?}
+
+OpenAMQ offers the WireAPI library to interact with 
+the OpenAMQ server, since the binding to Ruby written by 
+Benjamin April $<$bapril@gmail.com$>$ dating from 2007 was very 
+limited, this version is mainly a fresh start to expose the 
+WireAPI-library to Ruby in a more complete way and closer to the 
+naming used in Ruby. Apart from names this binding tries to be
+close to the C api to make it easier for users of the bindings
+of other languages to use this binding also. In the rest of this 
+text there is a  distinction between the 
+WireAPI-library\index{WireAPI-library} and the 
+WireAPI-binding\index{WireAPI-binding}. The binding is 
+specific for ruby while the library belongs to the OpenAMQ project.
+
+Around the same time as this project was released to the public
+another implementation appeared. Chris Wong seems to be closer
+to the ruby way of doing things. His implementation can be found
+at http://github.com/lightwave/ropenamq/. Until now these bindings
+are not really compared as far as I know.
+
+The protocol itself might be easy but to understand how it works
+and can be used is a matter of reading on the net.\label{sec:info-url}
+\begin{itemize}
+\item http://www.openamq.org/doc:amqp-background  
+\item http://www.openamq.org/doc:user-1-introduction  
+\item http://rajith.2rlabs.com/category/amqp/ - details about using 
+  and concepts are explained very well here.
+\item http://www.openamq.org/tutorial:content-based-routing - how to use
+  routing with headers
+\end{itemize}
+
+
+Wireshark is aware of the AMQP protocol so it can be inspected in a
+similar way as http.
+
+
+
+\section{Alternatives}
+
+The WireAPI library is a part of OpenAMQ but there are other
+servers. Since the protocol is open this must be also possible
+to use the WireAPI with those other servers. The AMQP
+website\footnote{http://jira.amqp.org/confluence/display/AMQP/AMQP+Products} 
+metions the following implemetations
+
+\begin{itemize}
+  \item OpenAMQ -  http://www.openamq.org/
+  \item Apache QPid - http://cwiki.apache.org/qpid/
+  \item RabbitMQ - http://www.rabbitmq.com/
+  \item $\oslash$MQ - http://www.zeromq.org/
+\end{itemize}
+
+Apache-QPid\index{QPid} offers a Ruby client that is written 
+only in Ruby without any native code. There are 2 versions of 
+the server for this project. A C++ and a Java implementation which
+seem to have different objectives.
+
+The WireAPI library claims to be the only one that supports direct 
+mode for higher performance at this moment.
+
+RabbitMQ is written in Erlang which is nice for multiprocessor 
+scalability. But they don't seem to offer a Ruby client.
+
+ZeroMQ and OpenAMQ are both created by IMatix, ZeroMQ can support 
+AMQP wire protocol, so probably this binding will work with it.
+
+
+
+\section{Build the GEM}
+
+For the development of this binding we used OpenAMQ-1.3, it 
+doesn't mean at all other versions won't work. Just this 
+version worked during the testing.
+
+Make sure the {\tt OpenAMQ-1.3c5.tar.gz} with a an environment
+variable {\tt IBASE} for example /opt/amq is installed. If this 
+is not yet available, install it, while being very patient. The 
+variable {\tt AMQ\_HOME} needs to have the value used as IBASE 
+to be installed. The script {\tt build\_gem.sh} will create a 
+gem file that can be installed similar to other gems. 
+
+During the {\tt gem install} this AMQ\_HOME variable is needed to
+find the libraries and include files. A test for this variable is 
+in the ext\_conf.rb file.
+
+On some systems there is a problem with the definition of the
+type 'off64\_t' in the file apr.h, if this happens replace it
+with '\_\_offset64\_t' so put a double underscore as a prefix
+which can help.
+
+This manual is written in \LaTeX { }  and can be build with the
+included makefile file {\tt Makefile.doc}. The 'normal' makefile
+is generated with by the {\tt ext\_conf.rb} script and applies
+only to the code for the binding.
+
+For instance:
+\begin{verbatim}
+make -f Makefile.doc manual.pdf
+\end{verbatim}
+
+
+\section{Structure of the binding}
+
+The WireAPI is a class\footnote{There can be multiple instances
+but they will point to the same object.} but mainly acts as a 
+namespace, there are a few classes in this namespace. 
+
+\begin{itemize}
+\item WireAPI::AMQ\_Auth used only to create a connection
+\item WireAPI::AMQ\_Connection - In theory a connection could
+  contain multiple sessions, but OpenAMQ doesn't support this
+  anymore.
+\item WireAPI::AMQ\_ContentBasic - The content or message that
+  will be used to interact via the server.
+\item WireAPI::AMQ\_Error - used for exceptions from the 
+  WireAPI-library or the binding
+\item WireAPI::AMQ\_ServerError - used for errors that were sent
+  by the server
+\item WireAPI::AMQ\_Session - In the future session and connection 
+  will be merged together, so many methods  are available in both now.
+
+\item WireAPI::AMQ\_FieldList - contains headers of a AMQ\_ContentBasic. 
+\item WireAPI::AMQ\_int64 - used for delivery tags, for ruby this
+  object is opaque since there is no real need to see the content
+  of it at this moment.
+\end{itemize}
+
+
+Most objects have a {\tt destroy} method to force the destruction 
+of the internal object in the WireAPI binding. The garbage collector 
+will call this {\tt destroy} method when needed. After calling 
+{\tt destroy} on a ruby object of the binding it should no longer
+be used. The Ruby objects are a wrapper around the objects in the
+library, when their internal core is removed these objects are have
+no meaning anymore.
+
+
+\section{Concepts}
+
+The aim of this section is not to explain all details about 
+AMQP but to give a bit of quickstart info enought to understand
+what the main concepts are. Since the words might be similar
+to other system like for instance JMS \index{JMS} the sematics
+are very different. For example \emph{topic} and \emph{queue} 
+are not related at all to the JMS concepts, so try not to 
+find any relationship with other system to understand AMQP 
+in the first place. The websites mentioned in section 
+\ref{sec:info-url} (page \pageref{sec:info-url}), and the 
+website of AMQP will offer more information.
+
+\subsection{Durable}
+
+The word has two meanings, the first is that queues and exchanges
+can be durable in AMQP (but not in OpenAMQ), it means the server
+will create them again after a restart.
+
+A \emph{durable subscription} \index{durable} is the opposite of a 
+\emph{transient subscription} \index{transient}it means that 
+after a consumer stops the received data stays in the queue. To 
+make a transient subscription use the exclusive flag (which implies 
+the  auto\_delete flag) when on declaring the queue in the 
+consumer program. When the consumer stops the queue will 
+be deleted as its content.
+
+
+
+\subsection{Queue and Exchange}\index{Queue}\index{Exchange}
+An Exchange is an inbound message router, and a 
+Queue is a message delivery vehicle. Messages come 
+into an Exchange, which directs them to Queues. Each 
+Exchange is responsible for routing messages to the 
+consumers that want them, and uses the logic embedded 
+in it to support this.
+
+\subsection{Binding}\index{Binding}
+
+A binding defines the relationship between an 
+exchange and a queue. In other words it defines 
+the routing criteria. The most simple case is where 
+the binding equals the queue name. A binding 
+decouples a queue from an exchange. The same 
+queue can be bound to any number of exchanges 
+using the same criteria or different criteria. 
+Different queues can be bound to the same exchange 
+using the same routing criteria as well.
+
+
+
+\subsection{Exchange types}
+
+The type of an exchange defines how the routing
+will work for instance by routing\_key, headers
+or no control at all. OpenAMQ has already some 
+predefined exchanges so in most cases declaring 
+your own exchange might not be
+needed. 
+
+\begin{itemize}
+  \item Direct Exchange \index{direct} - 
+    The exchange does a direct  match between 
+    the routing key provided in the 
+    message and the routing criteria used when a 
+    queue is bound to this exchange.    
+  \item Topic Exchange \index{topic} - 
+    The exchange does a wildcard 
+    match between the routing key and the routing 
+    pattern specified in the binding. The routing 
+    key is treated as zero or more more words, 
+    delimited by ‘.’ and supports special wildcard 
+    characters. “*” matches a single word and 
+    ‘\#’ matches zero or more words.
+  \item Fanout Exchange \index{fanout} - 
+    Queues are bound to this 
+    exchange with no arguments. Hence any message 
+    sent to this exchange will be forwarded to all 
+    queues bound to this exchange.
+  \item Headers Exchange \index{headers} - 
+    Queues are bound to this 
+    exchange with a table of arguments containing 
+    headers and values (optional). A special argument 
+    named “x-match” determines the matching algorithm, 
+    where “all” implies an AND (all pairs must match) 
+    and “any” implies OR (at least one pair must match).
+    These headers need to be specified with the {\tt queue\_bind}
+    method as arguments.
+\end{itemize}
+
+
+\subsection{Predefined Exchanges}
+With the program {\tt amq\_shell} \index{amq\_shell} you 
+can find the following exchanges, which represent 
+the types shown before. 
+\begin{itemize}
+  \item amq.fanout \index{amq.fanout}
+  \item amq.direct \index{amq.direct}
+  \item amq.topic  \index{amq.topic}
+  \item amq.headers \index{amq.headers}   
+\end{itemize}
+
+There are several other objects shown with the {\tt ls}
+command.
+
+
+\section{Collaboration}
+
+In this section a few structures are shown as an example how
+the binding works.
+
+\subsection{Structure of a program}
+Most programs will have a structure shown below, 
+calling the {\tt destroy} can be handled automatically
+via the garbage collection in a safe way also.
+
+\begin{itemize}
+\item Create the WireAPI object,
+\item create an AMQ\_Auth object with credentials
+\item create an AMQ\_Connection object 
+\item create an AMQ\_Session object
+\item interact via the WireAPI
+\item destroy the AMQ\_Session object
+\item destroy the AMQ\_Connection object
+\end{itemize}
+
+
+\subsection{Creating a consumer}
+The consumer receives data from the OpenAMQ server. 
+There is also a basic\_get method but it is less 
+efficient compared to a consumer.  It is not yet 
+clear how it must be used. When binding a queue 
+to an exchanges can be complex since you need to wait 
+until the exchange exists. 
+The predefined exchanges can be a solution for this
+problem. It is also possible to test for the
+existence of an exchange by using the {\tt passive} flag
+when calling {\tt exchange\_declare}
+
+\begin{itemize}
+  \item create the AMQ\_Session object
+  \item declare the queue, maybe just passive
+  \item bind the queue to an exchange
+  \item basic\_consume
+  \item call wait
+  \item call basic\_arrived to receive an AMQ\_ContentBasic
+  \item repeat the last 2 steps until finished
+  \item basic\_cancel
+  \item delete the queue if needed
+\end{itemize}
+
+
+\subsection{Creating a publisher}
+A publisher sends data to the OpenAMQ server. The server
+will use the types in bindings to get the data flowing to
+the right queues.
+
+\begin{itemize}
+  \item create the AMQ\_Session object
+  \item declare the exchange, maybe only  passive
+  \item create an AMQ\_ContentBasic object
+  \item populate the content
+  \item call basic\_publish to send it the the server
+  \item delete the exchange if needed
+\end{itemize}
+
+
+
+
+\section{Classes}
+
+A short list of all the methods of the object to show 
+how to use them to interact with the server. The aim 
+was to make it ruby style, not to translate all the names 
+from the C functions. Since ruby has garbage collection, 
+the most important classes support this by destroying them 
+at them when they are remove by the garbage collector.
+
+The WireAPI class is a bit special, since this is a
+singleton, each instance will point to the same object.
+When all instances are removed the internal structures
+will also be removed.
+
+\subsection{WireAPI}\index{WireAPI}
+
+The namespace for this binding is all in this object. Before
+using this binding make sure to have an object of the class
+WireAPI since it existence controls the internal structures
+of the WireAPI library. There are 2 methods to create debug
+output that are for the entire WireAPI library.
+
+\method{WireAPI.new}{number=0}{WireAPI}
+       {
+         This method will initialize the binding. The optional 
+         argument defines the tracing level as a bitmap. Value
+         4 controls the {\tt debug\_connection} and value 8 
+         controls the {\tt debug\_session} these need to be ORed.      
+         This parameter is only used when not 0 so to disable
+         debugging use a value without bit values  4 and 8,
+         for example '16'. These values were selected to not
+         interfere with the values for the parameter trace
+         of {\tt connection\_new} so tracing could be configured
+         with a singele number.
+         Try to have only one instance of this object, since all 
+         ruby instances will point to the same singleton.         
+
+         The tracing level can be changed at any time with the 
+         {\tt debug\_connection=} and the {\tt debug\_session}
+         methods.
+       }
+
+
+\method{auth\_plain}{username, password}{AMQ\_Auth}
+       {
+         creates an auth object to be used with the 
+         client\_connection\_new method as the third argument. 
+         Object of this type are destroyed by the garbage collector,
+         it only exists because of the WireAPI library, it could
+         have been implemented with 2 values in the method
+         to create a connection.
+       }
+
+
+\method{connection\_new}
+       {host, vhost, auth\_data, client\_name, trace, timeout}
+       {AMQ\_Connection}
+       {
+         Creates a new connection to the server. On this connection
+         the programmer needs to create an AMQ\_Session.
+         An alternative style is to use a codeblock that receives the
+         AMQ\_Connection as an argument at the end of this block the
+         connection will be destroyed.
+         \begin{itemize}
+           \item host (string) - Specifies a server name 
+             or IP address, optionally ending in ':' plus 
+             a port number.
+           \item vhost (string) - the vhost name can be nil for the default '/'
+           \item client\_name (string) - The instance argument 
+             sets the client instance name, which can be used 
+             to identify a specific client in the management 
+             console or server log.
+           \item trace (number) - sets the trace level for WireAPI library,
+             the lowest 2 bit will be used (0-3)
+           \item timeout(number) - This argument governs 
+             all synchronous exchanges with the server - if the 
+             server does not respond within this time, the connection 
+             treats it as a fatal error. A timeout of zero means 
+             "infinite". A good value for fast networks is five 
+             to ten seconds; for a slower network, a value of 30 
+             seconds or more is reasonable. The unit of this value
+             is in milleseconds.
+         \end{itemize}
+       }
+
+\method{debug\_connection=}
+       {flag}{self}
+       {
+         enable or disable tracing of the connection to stderr 
+       }
+
+
+\method{debug\_session=}
+       {flag}{self}
+       {
+         enable or disable tracing of the session to stderr
+       }
+
+
+\subsection{AMQ\_Connection}\index{WireAPI::AMQ\_Connection}
+
+A connection is a TCP/IP connection from a client 
+to an OpenAMQ server. AMQP is a multi-channel protocol, 
+meaning that one network connection can carry an arbitrary 
+number \footnote{OpenAMQ currently supports exactly ONE 
+session per connection.} of parallel, independent virtual 
+connections, which AMQP calls "channels". In WireAPI these 
+are called "sessions" for compatibility with other 
+middleware APIs. 
+
+\method{alive}{}{boolean}
+       {returns false when connection has had an error}
+       
+\method{client\_session\_new}{}{AMQ\_session} 
+       {Opens a session, in OpenAMQ there is only one session for
+        a connection.
+        An alternative style is to use a codeblock that receives the
+        AMQ\_Session as an argument at the end of this block the
+        session will be destroyed.
+       }
+
+\method{destroy}{}{nil} 
+       {Destroys the connection, garbage collection will destroy the object
+       also, but calling this method allows the programmer to trigger it,
+       after this the internal object will no longer be usable.}
+
+
+\method{error\_text}{}{string} 
+       {error string reported by the API}
+
+\method{reply\_code}{}{number} 
+       {error value reported by server}
+
+\method{reply\_text}{}{string} 
+       {error string reported by the server}
+
+\method{server\_copyright}{}{string} 
+       {copyright notice reported by server}
+
+\method{server\_platform}{}{string} 
+       {operating system platform reported by server}
+
+\method{server\_product}{}{string} 
+       {product name reported by server}
+
+\method{server\_version}{}{string} 
+       {product version reported by server}
+
+\method{silent}{}{boolean} 
+       {suppresses error reporting when true}
+
+\method{silent=}{boolean}{self} 
+       {suppresses error reporting when set to true}
+
+
+
+\subsection{AMQ\_Session}\index{WireAPI::AMQ\_Session}
+
+A session corresponds to an AMQP channel, and is 
+a virtual connection to an AMQP server. You must 
+at least create one session in order to talk with 
+an AMQP server. While AMQP offers multiplexing in 
+theory, OpenAMQ no longer implements this, mainly 
+because there are no proven performance advantages. 
+So you should create a single session per connection, 
+no more. Future versions of WireAPI may merge the 
+session and connection classes.
+
+
+When an AMQ\_Error\index{WireAPI::AMQ\_Error} is thrown, 
+in most cases the error\_text will be used as message. 
+Unless the message was not from the WireAPI library but 
+from the binding. These strings don't offer a number code 
+at this moment for easier handling. 
+On the other hand the AMQ\_ServerError
+\index{WireAPI::AMQ\_ServerError}  contains a reply\_code method
+which makes it easier for a program to be aware of 
+the cause of the exception.
+
+\method{active}{}{boolean}
+       {??}
+
+\method{alive}{}{boolean}
+       {returns false when connection has had an error.
+       If the connection is broken this implies the session}
+
+\method{basic\_ack}{delivery\_tag, multiple}{boolean}
+       {
+         \begin{itemize}
+           \item delivery\_tag (AMQ\_int64) - can be retrieved with 
+             the {\tt delivery\_tag} method
+           \item multiple (boolean) -
+         \end{itemize}
+       }
+
+\method{basic\_arrived}{}{AMQ\_Content}
+       {
+       returns nill when no content is available.
+       returns the content, that is available after a call to {\tt wait}
+       }
+
+
+\method{basic\_cancel}{consumer\_tag}{self}
+       {
+       The consumer\_tag is a string the was used for the 
+       basic\_consume. It ends the consumer
+       }
+
+
+\method{basic\_cancel\_nowait}{consumer\_tag}{self}
+       {
+       similar to basic\_cancel but doesn't wait until
+       it is finished
+       }
+
+
+\method{basic\_consume}
+       {queue\_name, consumer\_tag, no\_local, no\_ack, exclusive, arguments=nil}
+       {self}
+       {
+       \begin{itemize}
+         \item queue\_name (string) - the queue to receive data from
+         \item consumer\_tag (string) - a possible empty string to identify
+           this consumer
+         \item no\_local (boolean) - messages from this session will 
+           not be received when true
+         \item no\_ack (boolean) -
+         \item exclusive (boolean) -
+         \item arguments (AMQ\_FieldList) - optional. A hash will be 
+           converted to an AMQ\_FieldList when used.
+       \end{itemize}
+       after basic\_consume use wait and basic\_arrived
+       to receive the data until calling basic\_cancel.
+       }
+â  
+
+\method{basic\_consume\_nowait}{queue\_name, consumer\_tag, no\_local, no\_ack,exclusive}
+       {self}
+       {
+       similar to basic\_consume but doesn't wait until
+       it is finished
+       }
+
+
+\method{basic\_get}{queue\_name, no\_ack}{self}
+       {
+         a way to receive without a consumer, the performance will 
+         be very low because of synchronization. 
+       }
+
+
+\method{basic\_publish}
+       {basic\_content, exchange\_name, routing\_key, mandatory, immediate, arguments=nil}
+       {self}
+       {
+         \begin{itemize}
+           \item basic\_content (WireAPI::AMQ\_ContentBasic) - the data to send
+           \item exchange\_name (string) - name of an exchange on the server
+           \item routing\_key (string) - a key used for routing in a dot 
+             separate form, the type of the exchange defines how this 
+             key is used
+           \item mandatory (boolean) -  message must be routable
+           \item immediate (boolean) -  message must be deliverable.
+         \end{itemize}
+       }
+
+\method{basic\_reject}
+       {delivery\_tag, requeue}
+       {boolean}
+       {
+         \begin{itemize}
+         \item delivery\_tag (AMQ\_int64) - can be retrieved with 
+           the {\tt delivery\_tag} method
+         \item requeue (boolean) -
+         \end{itemize}
+       }
+
+
+\method{consumer\_count}{}{number}
+       {
+         returns the number of consumers
+       }
+
+\method{consumer\_tag}{}{number}
+       {
+         server generated consumer tag, after creating a consumer with
+         {\tt basic\_consume}, when a consumer\_tag was specified in
+         the {\tt basic\_consume} it will be returned here. Otherwise
+         the server will create a value which will needed to cancel 
+         the consumer.
+       }
+
+\method{delivery\_tag}{}{AMQ\_int64}
+       {
+         the delivery tag which can be used for basic\_ack and 
+         basic\_reject. Even in the logging it shows 0 at this 
+         moment. Which means the binding will also get always the
+         same 0 value.
+       }
+
+
+\method{destroy}{}{nil} 
+       {Destroys the session, garbage collection will destroy the object
+       also, but calling this method allows the programmer to trigger it,
+       after this the internal object will no longer be usable.}
+
+\method{error\_text}{}{string} 
+       {error string reported by the API}
+
+
+\method{exchange}{}{string} 
+       {exchange name from last method}
+
+\method{exchange\_declare}
+       {exchange\_name, type, passive, durable, auto\_delete, internal, arguments=nil}
+       {self} 
+       {
+         create a new exchange. There are predefined exchanges called 
+         AMQ.* but in case there is need for another one they 
+         can be created.
+         \begin{itemize}
+         \item exchange\_name (string) - The exchange name is a 
+           client-selected string that identifies the exchange 
+           for publish methods. Exchange names may consist of 
+           any mixture of digits, letters, and underscores. 
+           Exchange names are scoped by the virtual host.
+         \item type (string) - Each exchange belongs to one of 
+            a set of exchange types implemented by the server. 
+            The exchange types define the functionality of the 
+            exchange - i.e. how messages are routed through it. 
+            It is not valid or meaningful to attempt to change 
+            the type of an existing exchange. OpenAMQ supports 
+            "fanout", "direct", "topic", and "header" exchanges.
+         \item passive (boolean) - do not create exchange. If set, 
+            the server will not create the exchange. The client 
+            can use this to check whether an exchange exists without 
+            modifying the server state.
+         \item durable (boolean) - not supported by OpenAMQ
+         \item auto\_delete (boolean) - If set, the exchange is 
+            deleted when all queues have finished using it.
+         \item internal (boolean) - If set, the exchange may not 
+           be used directly by publishers, but only when bound to 
+           other exchanges. Internal exchanges are used to construct 
+           wiring that is not visible to applications. 
+         \item arguments (AMQ\_FieldList) - internal configdata to
+           which is probably server specific. A hash will be 
+           coverted to an AMQ\_FieldList when needed.
+         \end{itemize}
+       }
+
+\method{exchange\_declare\_nowait}
+       {exchange\_name, type, passive, durable, auto\_delete, internal, arguments=nil}
+         {self} 
+       {
+       same as exchange\_declare but don't wait to complete.
+       }
+
+
+\method{exchange\_delete}
+       {exchange\_name}{self} 
+       {
+       deletes an exchange. An exchange can be predefined or have
+       an auto\_delete flag enabled, in both cases this method
+       will not be needed.
+       }
+
+
+\method{exchange\_delete\_nowait}
+       {exchange\_name}{self} 
+       {
+       same as exchange\_delete, but don't wait to complete.
+       }
+
+\method{message\_count}
+       {}{number} 
+       {
+         number of messages in queue
+% which queue , consumer ??
+       }
+
+\method{queue}
+       {}{string} 
+       {
+       queue name assigned by server, used for {\tt queue\_declare} with
+       a nil as queue\_name argument. This value will be needed to
+       be able to bind the created queue or delete it again. When
+       a name was specified for a {\tt queue\_declare} this name
+       will be returned.
+       }
+
+
+\method{queue\_bind}
+       {queue\_name, exchange\_name, routing\_key, arguments=nil}{self} 
+       {
+         Bind a queue to an exchange. Until a queue is bound it 
+         will not receive any messages. In a classic messaging model, 
+         store-and-forward queues are bound to a dest exchange 
+         and subscription queues are bound to a dest\_wild exchange.         
+         \begin{itemize}
+           \item queue\_name (string) - Specifies the name of the queue 
+             to bind. If the queue name is empty (nil), refers to the 
+             current queue for the channel, which is the last declared 
+             queue. Queue names may consist of any mixture of digits, 
+             letters, and underscores.
+           \item exchange\_name (string) - The exchange name 
+             is a client-selected string that identifies the exchange 
+             for publish methods. Exchange names may consist of any 
+             mixture of digits, letters, and underscores. Exchange 
+             names are scoped by the virtual host.
+           \item routing\_key (string) - Specifies the routing key 
+             for the binding. The routing key is used for routing 
+             messages depending on the exchange configuration. Not 
+             all exchanges use a routing key - refer to the specific 
+             exchange documentation. If the routing key is empty and 
+             the queue name is empty, the routing key will be the 
+             current queue for the channel, which is the last 
+             declared queue.
+           \item arguments (AMQ\_FieldList) - can be used for exchanges
+             with type 'headers'. A hash will be coverted to an
+             AMQ\_FieldList when used.
+         \end{itemize}
+       }
+
+
+\method{queue\_bind\_nowait}
+       {queue\_name, exchange\_name, routing\_key, arguments=nil}{self} 
+       {
+         same as queue\_bind, but don't wait to complete.
+       }
+
+
+\method{queue\_declare}
+       {queue\_name,passive,durable,exclusive,auto\_delete,arguments=nil}{self} 
+       {
+         \begin{itemize}
+           \item queue\_name (string) - Queue names may consist 
+             of any mixture of digits, letters, and underscores. 
+             May be specified, or may be nil. If the 
+             queue name is nil, the server creates and names 
+             a queue and returns this. You can access the last 
+             created queue from with the method queue; if you want 
+             to create many queues, copy the returned name somewhere safe.
+           \item passive (boolean) - do not create queue. If set, 
+             the server will not create the queue. The client can 
+             use this to check whether a queue exists without 
+             modifying the server state.
+           \item durable (boolean) - A durable message queue is 
+             like a configured object: when the server (re)starts, 
+             the message queue is present and active. 
+             Temporary queues are destroyed when the server 
+             shuts down. OpenAMQ doesn't support this.
+           \item exclusive(boolean) - request an exclusive queue. 
+             Exclusive queues may only be consumed from by the 
+             current connection. Setting the 'exclusive' flag 
+             always implies 'auto\_delete'.
+           \item auto\_delete (boolean) - If set, the queue is 
+             deleted when all consumers have finished using it. 
+             Last consumer can be cancelled either explicitly 
+             or because its channel is closed. If there was no 
+             consumer ever on the queue, it won't be deleted.
+           \item arguments (AMQ\_FieldList) - optional.  A hash 
+             argument will be converted when needed
+         \end{itemize}
+       }
+
+\method{queue\_declare\_nowait}
+       {queue\_name, passive, durable, exclusive, auto\_delete, arguments=nil}
+       {self} 
+       {
+         same as queue\_declare , but don't wait to complete.       
+       }
+
+
+\method{queue\_delete}
+       {queue\_name}{self} 
+       {
+         When a queue is deleted any pending messages are sent 
+         to a dead-letter queue if this is defined in the server 
+         configuration, and all consumers on the queue are cancelled.
+         \begin{itemize}
+           \item queue\_name (string) - Specifies the name of 
+             the queue to delete. If the queue name is nil, 
+             refers to the current queue for the channel, 
+             which is the last declared queue. Queue names may 
+             consist of any mixture of digits, letters, and underscores.
+         \end{itemize}         
+       }
+
+\method{queue\_delete\_nowait}
+       {queue\_name}{self} 
+       {
+         same as queue\_delete , but don't wait to complete.       
+       }
+
+
+\method{queue\_purge}
+       {queue\_name}{self} 
+       {
+         This method removes all messages from a queue. It 
+         does not cancel consumers. Purged messages are 
+         deleted without any formal "undo" mechanism.
+         \begin{itemize}
+         \item queue\_name (string) - Specifies the name of the queue 
+           to purge. If the queue name is empty, refers to the current 
+           queue for the channel, which is the last declared queue. 
+           Queue names may consist of any mixture of digits, letters, 
+           and underscores.
+         \end{itemize}
+
+       }
+
+\method{queue\_purge\_nowait}
+       {queue\_name}{self} 
+       {
+         same as queue\_purge , but don't wait to complete.       
+       }
+
+
+\method{queue\_unbind}
+       {queue\_name, echange\_name, routing\_key, arguments=nil}{self} 
+       {
+         Unbind a queue from an exchange.
+         \begin{itemize}
+           \item queue\_name (string) - Specifies the name 
+             of the queue to unbind. If the queue name is 
+             empty, refers to the current queue for the 
+             channel, which is the last declared queue. 
+             Queue names may consist of any mixture of digits, 
+             letters, and underscores.
+           \item exchange\_name (string) - The exchange 
+             name is a client-selected string that identifies 
+             the exchange for publish methods. Exchange names 
+             may consist of any mixture of digits, letters, 
+             and underscores. Exchange names are scoped by 
+             the virtual host.
+           \item routing\_key (string) - Specifies the routing key 
+             of the binding to unbind.
+           \item arguments (AMQ\_FieldList) - optional, depends on the
+             type of exchange. A hash argument wile be converted when needed.
+         \end{itemize}
+       }
+
+\method{queue\_unbind}
+       {queue\_name, echange\_name, routing\_key, arguments=nil}{self} 
+       {
+         same as queue\_unbind , but don't wait to complete.       
+       }
+
+
+\method{redelivered}
+       {}{boolean} 
+       {
+         message is being redelivered
+       }
+
+\method{reply\_code}{}{number} 
+       {
+         error value reported by server. When this value is not
+         0 most methods will throw a AMQ\_ServerError.
+       }
+
+
+\method{reply\_text}{}{string} 
+       {
+         error string reported by the server. This will be used
+         when AMQ\_ServerError is thrown as message.         
+       }
+
+
+\method{routing\_key}{}{string} 
+       {
+        the routing key from the last message.
+       }
+
+\method{wait}{number=0}{self} 
+       {
+         Waits for content to arrive from the server. You must call 
+         this method in order to get content. Returns either because 
+         content arrived or because the timeout (in milliseconds) 
+         expired. This timeout value is optional, when no timeout is 
+         specified (also for values 0 and nil) there is no timeout at all.
+         The wait method should not be replaced by a OS sleep of any 
+         type since {\tt wait} is aware of the session being alive and
+         stops also when the {\tt basic\_arrive} method will return
+         a result. Als the internals of WireAPI will not be blocked
+         by it.
+       }
+
+
+\subsection{AMQ\_ContentBasic}\index{WireAPI::AMQ\_ContentBasic}
+
+AMQP uses the term "content" to mean an application 
+message (the term "message" means different things 
+at the application, protocol, and internal technical 
+levels, so is confusing).
+
+These AMQ\_Contents can be routed to consumers in 
+different ways, for each type the right exchange will
+be chosen to public the content.
+
+\begin{itemize}
+  \item fanout - all bound subscribers receive it
+  \item routing key - can handled in different ways (direct, topic)
+  \item headers - the headers control which queue will receive it
+\end{itemize}
+
+Apart from these headers are some properties which are not
+for routing but they can also contain various information.
+
+
+\method{WireAPI::AMQ\_ContentBasic.new}{}{AMQ\_ContentBasic} 
+       {
+         creates a content object to be published via a session
+       }
+
+
+\method{app\_id}{}{string} 
+       {
+         Get creating application id.
+       }
+
+
+\method{app\_id=}{string}{self} 
+       {
+         sets creating application id.
+       }
+
+
+\method{body}{number=nil}{string} 
+       {
+         Get the body of the message as a string the maximal
+         length can be specified optionally. Nil can also
+         be used as maximal value. In most cases the default
+         nil will be the best choice.
+       }
+
+\method{body=}{string}{self}
+       {
+         sets the body of the message 
+       }
+
+\method{body\_size}{}{number}
+       {
+         Get the body size of the content
+       }
+
+\method{content\_encoding}{}{string}
+       {
+         Get MIME content encoding.
+       }
+
+\method{content\_encoding=}{string}{}
+       {
+         Set MIME content encoding. 
+       }
+
+\method{content\_type}{}{string}
+       {
+         Get MIME content type.
+       }
+
+\method{content\_type=}{string}{}
+       {
+         Set MIME content type. 
+       }
+
+
+\method{correlation\_id}{}{string}
+       {
+         Get the correlation id, this can refer
+         to the message id that triggered this
+         message. Like the answer to a question
+         with a message\_id.
+       }
+
+\method{correlation\_id=}{string}{}
+       {
+         Set the correlation id probably, this can be
+         the message id from the received message that
+         triggered sending a message.
+       }
+
+\method{delivery\_mode\_persistent}{}{boolean}
+       {
+         in the WireAPI library delivery mode can be non-persistent(1) 
+         or persistent(2) this method returns this as a boolean
+       }
+
+
+\method{delivery\_mode\_persistent=}{boolean}{self}
+       {
+         in the WireAPI library delivery mode can be non-persistent(1) 
+         or persistent(2) this method sets the value based on its
+         argument.
+       }
+
+\method{destroy}{}{nil}
+       {
+         The same as {\tt unlink} method but this alias
+         is similar to other objects. From the Ruby side the
+         effect will be the same as the other {\tt destroy}
+         methods.
+       }
+
+\method{exchange}{}{string}
+       {
+         Get the exchange\_name to which the content was published.
+       }
+
+
+\method{expiration}{}{string}
+       {
+         'Message expiration specification'
+       }
+
+
+\method{expiration=}{string}{self}
+       {
+         The format of this 'Message expiration specification' might
+         must be uniform, but until today no specification has been
+         found.
+       }
+
+
+\method{headers}{}{AMQ\_FieldList}
+       {
+         Get the headers of a message. When you are certain that
+         all keys are unique this can be converted to a hash.
+       }
+
+\method{headers=}{AMQ\_FieldList}{}
+       {
+         Sets the headers of a message. The argument can also
+         be a ruby Hash, in this case a new AMQ\_FieldList will 
+         be created and the add\_hash method will be used to 
+         populate the Fieldlist with the keys and values of 
+         the hashtable.
+       }
+
+
+\method{message\_id}{}{string}
+       {
+         Get application message identifier of the object.
+       }
+
+\method{message\_id=}{string}{}
+       {
+         Sets the message identifier of the object.
+       }
+
+\method{priority}{}{number}
+       {
+         Get the message priority.
+       }
+
+\method{priority=}{number}{}
+       {
+         Set the message priority from in the range from 0 to 9.
+       }
+
+\method{producer\_id}{}{string}
+       {
+         Get the producer id of the publishing connection.
+       }
+
+\method{reply\_to}{}{string}
+       {
+         Get the destination to reply to.
+       }
+
+\method{reply\_to=}{string}{}
+       {
+         Set the destination to reply to.
+       }
+
+\method{routing\_key}{}{string}
+       {
+         The original routing\_key specified by the publisher.
+       }
+
+\method{type}{}{string}
+       {
+         Get the message type name. This will be in most cases
+         a high level type, different from the content\_type.
+       }
+
+\method{type=}{string}{}
+       {
+         Set the message type name.
+       }
+
+\method{unlink}{}{nil}
+       {
+         Unlinks the internal object, this method will be
+         called also by the garbage collector. After calling
+         this method the object is no longer usable. The 
+         internal object might still exist in another thread
+       }
+
+\method{user\_id}{}{string}
+       {
+         Get creating user id.
+       }
+
+\method{user\_id=}{string}{}
+       {
+         Set creating user id.
+       }
+
+
+
+
+\subsection{AMQ\_FieldList}\index{WireAPI::AMQ\_Connection}
+
+The fieldlist tries to be similar to a hash, it can be 
+converted to a hash in most cases. It can be also populated 
+from a hash with the add\_hash method. The {\tt header=} method 
+can also handle a hash instead of AMQ\_FieldList instances. 
+The main difference with a hash is that the same key can 
+appear multiple times. When this feature makes sense, using 
+a hash will not be an option. The {\tt each\_pair} method will give
+access to the keys and values when a key occurs multiple times.
+
+The stored keys will be always a string, when they need to be
+converted by calling their {\tt to\_s} method, this will be
+called automatically.
+
+\method{WireAPI::AMQ\_FieldList.new}{[AMQ\_FieldList|Hash]}{AMQ\_FieldList} 
+       {
+         creates a FieldList to be used with {\tt AMQ\_ContentBasic\#headers=}
+         or as argument list for several method of {\tt AMQ\_Session}.
+         This constructor can accept a hash as argument or work like a
+         copy constructor.
+       }
+
+
+\method{add\_hash}{hash}{self} 
+       {
+         adds the keys from a hash with the value to the fieldlist. This is
+         like using {\tt put} for all keys in the hash argument.
+       }
+
+
+\method{destroy}{}{nil} 
+       {Destroys the fieldlist, garbage collection will destroy the object
+       also, but calling this method allows the programmer to trigger it,
+       after this the internal object will no longer be usable.}
+
+
+\method{each\_pair}{}{self} 
+       {
+         iterates over all keys (also multiple ones) with a codeblock that
+         receives 2 arguments, the key and the value. This is intented
+         when not all keys are unique.
+       }
+
+
+\method{get}{string}{object} 
+       {
+         retrieves the value of a key or nil, in case of not unique keys only
+         the first value will be returned.
+       }
+
+
+\method{keys}{}{array of strings}
+       {
+         returns an array of the keys similar to a hash. but multiple keys will
+         appear more times, so this is a way to detect them. 
+       }
+
+
+\method{keys\_unique?}{}{boolean}
+       {
+         Returns true when all keys are unique. In this case converting
+         to a hash will be no problem. When the keys are not unique
+         converting to hash will loose the double keys.
+       }
+
+
+\method{put}{string, object}{self} 
+       {
+         add a key with a value to the list, the object can be currently
+         5 types (string, Fixnum, Time, Float, or nil) The float numbers
+         will be represented as fixed points, which implies a limited
+         range. When the key is not a string, the method {\tt to\_s} will
+         be called on the key. When key already existed before, there
+         will be two instances of the key.
+       }
+
+
+\method{to\_hash}{}{hash} 
+       {
+         Transforms to a hash. When the keys are not unique the last
+         value of the multiple keys will be used. Before calling this
+         method a test with {\tt keys\_unique?} is a way to know
+         it can be converted to a hash.
+       }
+
+
+\method{[]}{string}{object} 
+       {
+         an alias for the get method, to look more like a hash
+       }
+
+
+\method{[]=}{string, object} {self}
+       {
+         an alias for the put method, to look more like a hash.
+         Be aware it add a key, it doesn't replace an existing key.
+       }
+
+\subsection{AMQ\_ServerError}\index{WireAPI::AMQ\_ServerError}
+This is a subclass of the AMQ\_Error.\index{WireAPI::AMQ\_Error}
+
+When the reply\_code of the server is not 0 after calling
+a session method an object of this type will be thrown. The 
+{\tt message} is the {\tt reply\_text} of the session and 
+the {\tt reply\_code} can be retrieved with a method of 
+the same name.
+
+
+\method{message}{} {string}
+       {
+         return the reply\_text of the session since this
+         will be a human readable explanation.
+       }
+
+\method{reply\_code}{} {number}
+       {
+         returns the code of the error, which will be easier to
+         process than the human readable message. This will be
+         similar to the {\tt AMQ\_Session\#reply\_code}
+       }
+
+
+\printindex
+
+\end{document}
+
